@@ -1,0 +1,9 @@
+{
+  "name": "container-image-scan",
+  "version": "1.0.0",
+  "description": "Azure Container Vulnerability Scan",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
