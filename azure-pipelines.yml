@@ -1,29 +1,69 @@
 trigger:
-- main
-
-pool:
-  vmImage: 'ubuntu-latest'
+  - main
 
 variables:
-  # FIXED: Changed from container-scan-cnct to your Docker Registry connection name
   dockerRegistryServiceConnection: 'container-registry-cnct'
-  imageRepository: 'container-img-scanner'
+  imageRepository: 'dcba34'
   containerRegistry: 'containerimgscan.azurecr.io'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
   tag: '$(Build.BuildId)'
+  vmImageName: 'ubuntu-latest'
 
-steps:
+stages:
+  - stage: BuildAndPush
+    displayName: 'Stage 1 - Build and Push Image'
+    jobs:
+      - job: Build
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - task: Docker@2
+            displayName: 'Build and push image to ACR'
+            inputs:
+              command: buildAndPush
+              repository: $(imageRepository)
+              dockerfile: $(dockerfilePath)
+              containerRegistry: $(dockerRegistryServiceConnection)
+              tags: |
+                $(tag)
 
-- task: Docker@2
-  displayName: Build and Push Image
-  inputs:
-    command: buildAndPush
-    repository: $(imageRepository)
-    dockerfile: $(dockerfilePath)
-    containerRegistry: $(dockerRegistryServiceConnection)
-    tags: |
-      $(tag)
+  - stage: ScanGate
+    displayName: 'Stage 2 - Vulnerability Scan Gate'
+    dependsOn: BuildAndPush
+    jobs:
+      - job: WaitAndCheck
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Wait for scan, then check severity'
+            inputs:
+              azureSubscription: 'container-scan-cnct'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                echo 'Waiting for Defender scan to complete...'
+                sleep 300
+                DIGEST=$(az acr repository show \
+                  -n containerimgscan --image $(imageRepository):$(tag) \
+                  -o tsv --query digest)
+                echo "Image digest: $DIGEST"
+                RESULT=$(az graph query -q \
+                  "securityresources | where type == 'microsoft.security/assessments' \
+                   | where properties.additionalData.imageDigest == '$DIGEST'" \
+                  -o json)
+                echo "$RESULT" | grep -qi 'unhealthy' && \
+                  { echo 'CRITICAL/HIGH vulnerabilities found. Blocking deploy.'; exit 1; } || \
+                  echo 'Scan passed. Proceeding to deploy.'
 
-- script: |
-    echo "Container image built and pushed successfully."
-  displayName: Verify Build
+  - stage: Deploy
+    displayName: 'Stage 3 - Deploy'
+    dependsOn: ScanGate
+    condition: succeeded()
+    jobs:
+      - job: DeployApp
+        pool:
+          vmImage: $(vmImageName)
+        steps:
+          - script: echo 'Deploying clean, scanned image to environment'
+            displayName: 'Deploy step'
