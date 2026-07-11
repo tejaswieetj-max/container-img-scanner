@@ -5,7 +5,8 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  dockerRegistryServiceConnection: 'container-scan-cnct'
+  # FIXED: Changed from container-scan-cnct to your Docker Registry connection name
+  dockerRegistryServiceConnection: 'container-registry-cnct'
   imageRepository: 'container-img-scanner'
   containerRegistry: 'containerimgscan.azurecr.io'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
