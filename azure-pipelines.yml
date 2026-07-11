@@ -1,0 +1,28 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  dockerRegistryServiceConnection: 'container-scan-cnct'
+  imageRepository: 'container-img-scanner'
+  containerRegistry: 'containerimgscan.azurecr.io'
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
+  tag: '$(Build.BuildId)'
+
+steps:
+
+- task: Docker@2
+  displayName: Build and Push Image
+  inputs:
+    command: buildAndPush
+    repository: $(imageRepository)
+    dockerfile: $(dockerfilePath)
+    containerRegistry: $(dockerRegistryServiceConnection)
+    tags: |
+      $(tag)
+
+- script: |
+    echo "Container image built and pushed successfully."
+  displayName: Verify Build
