@@ -46,13 +46,8 @@ stages:
                  sleep 300
                  echo "Installing Resource Graph extension..."
                  az extension add --name resource-graph --yes
-                 STATUS=$(az graph query -q "
-                 securityresources
-                 | where type =~ 'microsoft.security/assessments'
-                 | where properties.resourceDetails.ResourceName == 'containerimgscan'
-                 | project status=tostring(properties.status.code)
-                 " -o tsv)
-                 echo "Assessment Status: $STATUS"
+                 STATUS=$(az graph query -q "securityresources | where type =~ 'microsoft.security/assessments' | where properties.resourceDetails.ResourceName == 'containerimgscan' | project status=properties.status.code" -o table)
+                 echo "$STATUS"
                  if echo "$STATUS" | grep -qi "Unhealthy"; then
                     echo "========================================"
                     echo "HIGH / CRITICAL vulnerabilities found!"
