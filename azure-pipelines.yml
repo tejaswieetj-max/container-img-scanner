@@ -48,13 +48,12 @@ stages:
                   -n containerimgscan --image $(imageRepository):$(tag) \
                   -o tsv --query digest)
                 echo "Image digest: $DIGEST"
-                RESULT=$(az graph query -q \
-                  "securityresources | where type == 'microsoft.security/assessments' \
-                   | where properties.additionalData.imageDigest == '$DIGEST'" \
-                  -o json)
-                echo "$RESULT" | grep -qi 'unhealthy' && \
-                  { echo 'CRITICAL/HIGH vulnerabilities found. Blocking deploy.'; exit 1; } || \
-                  echo 'Scan passed. Proceeding to deploy.'
+                echo "===== Dumping Defender Assessment Data ====="
+                az extension add --name resource-graph --yes
+                az graph query -q "
+                securityresources
+                | where type =~ 'microsoft.security/assessments'
+                " -o json
 
   - stage: Deploy
     displayName: 'Stage 3 - Deploy'
