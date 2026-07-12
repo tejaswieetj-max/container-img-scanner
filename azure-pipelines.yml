@@ -1,5 +1,5 @@
 trigger:
-  - main
+  - trivy
 
 variables:
   dockerRegistryServiceConnection: 'container-registry-cnct'
