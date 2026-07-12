@@ -1,5 +1,5 @@
 trigger:
-  - main
+  - trivy
 
 variables:
   dockerRegistryServiceConnection: 'container-registry-cnct'
@@ -26,7 +26,6 @@ stages:
               containerRegistry: $(dockerRegistryServiceConnection)
               tags: |
                 $(tag)
-                latest
 
   - stage: ScanGate
     displayName: 'Stage 2 - Vulnerability Scan Gate'
@@ -43,14 +42,11 @@ stages:
               containerRegistry: $(dockerRegistryServiceConnection)
 
           - script: |
-              echo "Installing Trivy..."
-              wget https://github.com/aquasecurity/trivy/releases/download/v0.49.1/trivy_0.49.1_Linux-64bit.deb
-              sudo dpkg -i trivy_0.49.1_Linux-64bit.deb
-
-              echo "Executing Instant Vulnerability Scan on $(containerRegistry)/$(imageRepository):$(tag)..."
+              echo "Installing Trivy using the official installer..."
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
               
-              # Enforces the gate: Blocks deployment if High/Critical issues exist
-              trivy image --exit-code 1 --severity HIGH,CRITICAL $(containerRegistry)/$(imageRepository):$(tag)
+              echo "Executing Instant Vulnerability Scan on $(containerRegistry)/$(imageRepository):$(tag)..."
+              /usr/local/bin/trivy image --exit-code 1 --severity HIGH,CRITICAL $(containerRegistry)/$(imageRepository):$(tag)
             displayName: 'Trivy Security Gate Execution'
 
   - stage: Deploy
