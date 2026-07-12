@@ -26,75 +26,32 @@ stages:
               containerRegistry: $(dockerRegistryServiceConnection)
               tags: |
                 $(tag)
+                latest
 
   - stage: ScanGate
     displayName: 'Stage 2 - Vulnerability Scan Gate'
     dependsOn: BuildAndPush
     jobs:
-      - job: WaitAndCheck
+      - job: TrivyScan
         pool:
           vmImage: $(vmImageName)
         steps:
-          - task: AzureCLI@2
-            displayName: 'Poll Defender Scan and Check Severity'
+          - task: Docker@2
+            displayName: 'Login to ACR for Scanner Authentication'
             inputs:
-              azureSubscription: 'container-scan-cnct'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                echo "Installing Resource Graph extension..."
-                az extension add --name resource-graph --yes
+              command: login
+              containerRegistry: $(dockerRegistryServiceConnection)
 
-                MAX_ATTEMPTS=15
-                POLL_INTERVAL=30 
-                ATTEMPT=1
-                SCAN_FOUND=false
+          - script: |
+              echo "Installing Trivy..."
+              wget https://github.com/aquasecurity/trivy/releases/download/v0.49.1/trivy_0.49.1_Linux-64bit.deb
+              sudo dpkg -i trivy_0.49.1_Linux-64bit.deb
 
-                echo "Starting fast polling loop for Defender scan results (Max 7.5 minutes)..."
-
-                while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-                  echo "Attempt $ATTEMPT of $MAX_ATTEMPTS: Querying Azure Resource Graph..."
-                  
-                  # Your customized query structure
-                  STATUS=$(az graph query -q "securityresources | where type =~ 'microsoft.security/assessments' | where properties.resourceDetails.ResourceName == 'containerimgscan' | project status=tostring(properties.status.code)" --query "data[0].status" -o tsv)                  # Strip any formatting/spaces to evaluate clearly
-                  CLEAN_STATUS=$(echo "$STATUS" | tr -d '[:space:]')
-
-                  # Check if the query returned a blank result because Azure is still indexing
-                  if [ -z "$CLEAN_STATUS" ] || [ "$CLEAN_STATUS" = "null" ]; then
-                    echo "Assessment status not available yet. Re-checking in 30 seconds..."
-                    sleep $POLL_INTERVAL
-                    ATTEMPT=$((ATTEMPT + 1))
-                  else
-                    echo "Scan result captured!"
-                    SCAN_FOUND=true
-                    break
-                  fi
-                done
-
-                # Fail Closed Guardrail: Blocks if the loop finishes without finding a valid scan
-                if [ "$SCAN_FOUND" = false ]; then
-                  echo "========================================"
-                  echo "ERROR: Defender scan timed out after 7.5 minutes."
-                  echo "Blocking deployment for safety..."
-                  echo "========================================"
-                  exit 1
-                fi
-                echo "Raw assessment value: '$STATUS'"
-                echo "Clean assessment value: '$CLEAN_STATUS'"
-                echo "Assessment Status: $STATUS"
-                echo "DEBUG - raw status value before health check: '$STATUS'"
-                if echo "$STATUS" | grep -qi "Unhealthy"; then
-                  echo "========================================"
-                  echo "HIGH / CRITICAL vulnerabilities found!"
-                  echo "Blocking deployment..."
-                  echo "========================================"
-                  exit 1
-                else
-                  echo "========================================"
-                  echo "Image is Healthy."
-                  echo "Deployment Allowed."
-                  echo "========================================"
-                fi
+              echo "Executing Instant Vulnerability Scan on $(containerRegistry)/$(imageRepository):$(tag)..."
+              
+              # Enforces the gate: Blocks deployment if High/Critical issues exist
+              trivy image --exit-code 1 --severity HIGH,CRITICAL $(containerRegistry)/$(imageRepository):$(tag)
+            displayName: 'Trivy Security Gate Execution'
 
   - stage: Deploy
     displayName: 'Stage 3 - Deploy'
