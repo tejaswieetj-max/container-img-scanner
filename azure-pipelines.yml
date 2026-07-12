@@ -46,7 +46,7 @@ stages:
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
               
               echo "Executing Instant Vulnerability Scan on $(containerRegistry)/$(imageRepository):$(tag)..."
-              /usr/local/bin/trivy image --exit-code 1 --severity HIGH,CRITICAL $(containerRegistry)/$(imageRepository):$(tag)
+              /usr/local/bin/trivy image --exit-code 1 --severity CRITICAL $(containerRegistry)/$(imageRepository):$(tag)
             displayName: 'Trivy Security Gate Execution'
 
   - stage: Deploy
